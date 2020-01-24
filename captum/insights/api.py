@@ -185,6 +185,54 @@ class AttributionVisualizer(object):
 
         start_server(self, blocking=blocking, debug=debug, _port=port)
 
+    def serve_colab(self, blocking=False, debug=False, port=None):
+        from IPython.display import display, HTML
+        from captum.insights.server import start_server
+
+        start_server(self, blocking=blocking, debug=debug, _port=port)
+
+        shell = """
+            <div id="root"></div>
+            <script>
+              (function() {
+                window.TENSORBOARD_ENV = window.TENSORBOARD_ENV || {};
+                window.TENSORBOARD_ENV["IN_COLAB"] = true;
+                document.querySelector("base").href = "https://localhost:%PORT%";
+                function executeAllScripts(root) {
+                  // When `script` elements are inserted into the DOM by
+                  // assigning to an element's `innerHTML`, the scripts are not
+                  // executed. Thus, we manually re-insert these scripts so that
+                  // TensorBoard can initialize itself.
+                  for (const script of root.querySelectorAll("script")) {
+                    const newScript = document.createElement("script");
+                    newScript.type = script.type;
+                    newScript.textContent = script.textContent;
+                    root.appendChild(newScript);
+                    script.remove();
+                  }
+                }
+                function setHeight(root, height) {
+                  // We set the height dynamically after the TensorBoard UI has
+                  // been initialized. This avoids an intermediate state in
+                  // which the container plus the UI become taller than the
+                  // final width and cause the Colab output frame to be
+                  // permanently resized, eventually leading to an empty
+                  // vertical gap below the TensorBoard UI. It's not clear
+                  // exactly what causes this problematic intermediate state,
+                  // but setting the height late seems to fix it.
+                  root.style.height = `${height}px`;
+                }
+                const root = document.getElementById("root");
+                fetch(".")
+                  .then((x) => x.text())
+                  .then((html) => void (root.innerHTML = html))
+                  .then(() => executeAllScripts(root));
+              })();
+            </script>
+        """.replace("%PORT%", "%d" % port)
+        html = HTML(shell)
+        display(html)
+
     def _get_labels_from_scores(
         self, scores: Tensor, indices: Tensor
     ) -> List[OutputScore]:
