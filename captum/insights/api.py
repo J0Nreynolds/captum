@@ -188,17 +188,18 @@ class AttributionVisualizer(object):
     def serve_colab(self, blocking=False, debug=False, port=None):
         from IPython.display import display, HTML
         from captum.insights.server import start_server
-
-        start_server(self, blocking=blocking, debug=debug, _port=port)
+        import ipywidgets as widgets
+        import logging
+        out = widgets.Output()
+        with out:
+          port = start_server(self, blocking=blocking, debug=debug, _port=port)
 
         shell = """
             <div id="root"></div>
             <script>
               (function() {
-                window.TENSORBOARD_ENV = window.TENSORBOARD_ENV || {};
-                window.TENSORBOARD_ENV["IN_COLAB"] = true;
-                document.querySelector("base").href = "https://localhost:%PORT%";
-                function executeAllScripts(root) {
+                document.querySelector("base").href = "http://localhost:%PORT%";
+                function reloadScriptsAndCSS(root) {
                   // When `script` elements are inserted into the DOM by
                   // assigning to an element's `innerHTML`, the scripts are not
                   // executed. Thus, we manually re-insert these scripts so that
@@ -206,32 +207,35 @@ class AttributionVisualizer(object):
                   for (const script of root.querySelectorAll("script")) {
                     const newScript = document.createElement("script");
                     newScript.type = script.type;
-                    newScript.textContent = script.textContent;
+                    if(script.src){
+                      newScript.src = script.src;
+                    }
+                    if(script.textContent){
+                      newScript.textContent = script.textContent;
+                    }
                     root.appendChild(newScript);
                     script.remove();
                   }
-                }
-                function setHeight(root, height) {
-                  // We set the height dynamically after the TensorBoard UI has
-                  // been initialized. This avoids an intermediate state in
-                  // which the container plus the UI become taller than the
-                  // final width and cause the Colab output frame to be
-                  // permanently resized, eventually leading to an empty
-                  // vertical gap below the TensorBoard UI. It's not clear
-                  // exactly what causes this problematic intermediate state,
-                  // but setting the height late seems to fix it.
-                  root.style.height = `${height}px`;
+                  // Similar method is used to reload styles
+                  for (const link of root.querySelectorAll("link")) {
+                    const newLink = document.createElement("link");
+                    newLink.rel = link.rel;
+                    newLink.href = link.href;
+                    document.querySelector("head").appendChild(newLink);
+                    link.remove();
+                  }
                 }
                 const root = document.getElementById("root");
                 fetch(".")
                   .then((x) => x.text())
                   .then((html) => void (root.innerHTML = html))
-                  .then(() => executeAllScripts(root));
+                  .then(() => reloadScriptsAndCSS(root));
               })();
             </script>
         """.replace("%PORT%", "%d" % port)
         html = HTML(shell)
         display(html)
+        display(out)
 
     def _get_labels_from_scores(
         self, scores: Tensor, indices: Tensor
